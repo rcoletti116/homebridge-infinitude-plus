@@ -19,23 +19,29 @@ Other settings:
 
 HomeKit Features:
 - **Thermostat Control**: Set Target Temperature for Heat & Cooling. Infinitude values `htsp` and `clsp` respectively.
-- **Read Only Fan**: Currently provides data on whether the fan is On or Off. Hopefully control will come soon.
 - **Current Temperature:** Dislays current temperature reported by the zone thermostat. Infinitude values `rt`
 - **Hardware Display Unit:** control temperature unit (Celcius/Fahrenheit) of physical Theromstat.
 - **Filter Life Level:** Displays life of Filter, `100` being brand new and `0` needing replacement. Infinitude value `filtrlvl`
 - **Current Relative Humidity:** Displays indoor humidity reported by Thermostat. Infinitude value `rh`
-- **Mode Switches:** Change Thermostat modes with HomeKit switches
+- **Mode Switches:** Change Infinity Thermostat modes with HomeKit switches (Optional) **(Not Ready Yet)**
+- **Fan**: Currently provides data on whether the fan is On or Off. Control is Read/Write - HOWEVER, Infinitude does not provide a way to determine if a Fan is running under Auto or Manual. Suggested use with caution and temporary overrides only, allowing Infinity to properly control the fan.
+- **Outdoor Temperature Sensor**: Adds Temperature Sensor to use Infinity Outdoor temperature for home automation. Uses `OAT` value.
+- **Temperature Data History**: Uses the fakegato library to store data history in HomeKit. Visible only in Eve For HomeKit app.
 
 ![IMG_3261](https://github.com/dotfortun3-code/homebridge-infinitude-v2/assets/24662541/caa1dada-00c9-415f-9d8e-64201bb9bc1b)
 
-# Install
+# Install (Not Ready Yet)
 
-Use Homebridge-UI-X and Search for homebridge-infinitude
+Use Homebridge-UI-X and Search for homebridge-infinitude-plus
 
 OR
 
-run `sudo npm i -g homebridge-infinitude-v2`
+run `sudo npm i -g homebridge-infinitude-plus`
 
+## Custom Homebridge UI
+- **Configuration** - Easy configuration for your Infinitude controls
+- **Visibility** - Displays the status or your Infinitude Instance and allows you to open or preview your Infinitude dashboard.
+  
 ## Homebridge Configuration
 ```json
 {

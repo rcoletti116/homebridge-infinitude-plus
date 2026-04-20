@@ -1,0 +1,192 @@
+<!-- ── Nav tabs ──────────────────────────────────────────────────── -->
+<div class="btn-group w-100 mb-3" role="group">
+  <button type="button" class="btn btn-primary" id="tab-settings" onclick="showSettings()">
+    Settings
+  </button>
+  <button type="button" class="btn btn-primary" id="tab-instances" onclick="showInstances()">
+    Infinitude
+  </button>
+</div>
+
+<!-- Settings tab (schema form injected here) -->
+<div id="page-settings"></div>
+
+<!-- Infinitude tab -->
+<div id="page-instances" style="display:none;">
+  <div id="instances-list"></div>
+</div>
+
+<script>
+// Cached LAN IP fetched from server.js once per session
+let _lanIp = null;
+
+;(async () => {
+  try {
+    const currentConfig = await homebridge.getPluginConfig();
+    window._currentConfig = currentConfig;
+    showSettings();
+  } catch (err) {
+    homebridge.toast.error(err.message, 'Error');
+  } finally {
+    homebridge.hideSpinner();
+  }
+})();
+
+// ── Tab control ───────────────────────────────────────────────────
+function showSettings() {
+  homebridge.showSpinner();
+  document.getElementById('page-settings').style.display = 'block';
+  document.getElementById('page-instances').style.display = 'none';
+  document.getElementById('tab-settings').classList.add('btn-elegant');
+  document.getElementById('tab-settings').classList.remove('btn-primary');
+  document.getElementById('tab-instances').classList.remove('btn-elegant');
+  document.getElementById('tab-instances').classList.add('btn-primary');
+  homebridge.showSchemaForm();
+  homebridge.hideSpinner();
+}
+
+async function showInstances() {
+  homebridge.showSpinner();
+  homebridge.hideSchemaForm();
+  document.getElementById('page-settings').style.display = 'none';
+  document.getElementById('page-instances').style.display = 'block';
+  document.getElementById('tab-instances').classList.add('btn-elegant');
+  document.getElementById('tab-instances').classList.remove('btn-primary');
+  document.getElementById('tab-settings').classList.remove('btn-elegant');
+  document.getElementById('tab-settings').classList.add('btn-primary');
+  await buildInstanceCards();
+  homebridge.hideSpinner();
+}
+
+// ── Resolve the display URL for a thermostat ──────────────────────
+//
+// Priority:
+//   1. externalUrl if explicitly configured
+//   2. Auto-swap 127.0.0.1 / localhost with the server's LAN IP
+//   3. The configured url as-is
+//
+async function resolveDisplayUrl(thermostat) {
+  if (thermostat.externalUrl) {
+    return thermostat.externalUrl.replace(/\/$/, '');
+  }
+
+  const url = (thermostat.url || '').replace(/\/$/, '');
+  const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(url);
+
+  if (isLocal) {
+    if (_lanIp === null) {
+      try {
+        const result = await homebridge.request('/hostinfo', {});
+        _lanIp = result.lanIp || '127.0.0.1';
+      } catch (_) {
+        _lanIp = '127.0.0.1';
+      }
+    }
+    // Replace the loopback host with the LAN IP, preserve port and path
+    return url.replace(/^(https?:\/\/)(127\.0\.0\.1|localhost)/, `$1${_lanIp}`);
+  }
+
+  return url;
+}
+
+// ── Build instance cards ──────────────────────────────────────────
+async function buildInstanceCards() {
+  const list = document.getElementById('instances-list');
+  list.innerHTML = '<p class="text-muted text-center mt-3" style="font-size:13px;">Loading…</p>';
+
+  let thermostats = [];
+  try {
+    const cfg = await homebridge.getPluginConfig();
+    thermostats = cfg?.[0]?.thermostats || [];
+  } catch (_) {}
+
+  if (!thermostats.length) {
+    list.innerHTML = `
+      <div class="text-center text-muted mt-4" style="font-size:13px; line-height:1.7;">
+        No thermostats configured yet.<br>
+        Add one in the <strong>Settings</strong> tab, save, then come back here.
+      </div>`;
+    return;
+  }
+
+  // Resolve display URLs for all thermostats (may need one server round-trip)
+  const displayUrls = await Promise.all(thermostats.map(t => resolveDisplayUrl(t)));
+
+  list.innerHTML = thermostats.map((t, i) => {
+    if (!t || !t.url) return '';
+    const internalUrl = t.url.replace(/\/$/, '');
+    const displayUrl  = displayUrls[i];
+    const isSwapped   = displayUrl !== internalUrl && !t.externalUrl;
+
+    return `
+      <div class="card mb-2">
+        <div class="card-body py-2 d-flex align-items-center flex-wrap gap-2">
+          <div class="flex-grow-1">
+            <div style="font-size:13px; font-weight:600;">${esc(t.name || 'Thermostat ' + (i+1))}</div>
+            <div class="text-muted" style="font-size:11px;">${esc(internalUrl)}</div>
+            ${isSwapped ? `
+              <div style="font-size:10px; color:#6c757d;">
+                🔄 Opening via <strong>${esc(displayUrl)}</strong>
+              </div>` : ''}
+            ${t.externalUrl ? `
+              <div style="font-size:10px; color:#6c757d;">
+                🔗 External URL: <strong>${esc(displayUrl)}</strong>
+              </div>` : ''}
+          </div>
+          <span class="badge bg-secondary" id="badge-${i}">Checking…</span>
+          <a class="btn btn-sm btn-primary" href="${esc(displayUrl)}" target="_blank" rel="noopener">
+            Open ↗
+          </a>
+          <button class="btn btn-sm btn-outline-secondary"
+                  onclick="checkStatus(${i}, '${escA(internalUrl)}')">Ping</button>
+          <button class="btn btn-sm btn-outline-secondary"
+                  onclick="togglePreview(${i}, '${escA(displayUrl)}')">Preview</button>
+        </div>
+        <div id="iframe-wrap-${i}" style="display:none; border-top:1px solid rgba(128,128,128,0.15);">
+          <div class="text-muted p-2" style="font-size:11px; background:rgba(128,128,128,0.05);">
+            ⚠️ Browsers may block http:// iframes from https:// pages. Use Open ↗ if the preview is blank.
+          </div>
+          <iframe id="frame-${i}" src=""
+                  style="width:100%; height:500px; border:none; display:block;"
+                  title="${esc(t.name || '')}"></iframe>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Ping using internal URL (server-side, no CORS issue)
+  thermostats.forEach((t, i) => {
+    if (t && t.url) checkStatus(i, t.url.replace(/\/$/, ''));
+  });
+}
+
+// ── Status ping (uses internal URL via server.js) ─────────────────
+async function checkStatus(index, url) {
+  const badge = document.getElementById('badge-' + index);
+  if (!badge) return;
+  badge.className = 'badge bg-secondary';
+  badge.textContent = 'Checking…';
+  try {
+    await homebridge.request('/status', { url });
+    badge.className = 'badge bg-success';
+    badge.textContent = 'Online';
+  } catch (_) {
+    badge.className = 'badge bg-danger';
+    badge.textContent = 'Unreachable';
+  }
+}
+
+// ── Preview toggle ────────────────────────────────────────────────
+function togglePreview(index, url) {
+  const wrap  = document.getElementById('iframe-wrap-' + index);
+  const frame = document.getElementById('frame-' + index);
+  if (!wrap) return;
+  const opening = wrap.style.display === 'none';
+  wrap.style.display = opening ? 'block' : 'none';
+  if (opening && !frame.dataset.loaded) { frame.src = url; frame.dataset.loaded = '1'; }
+  else if (!opening) { frame.src = ''; delete frame.dataset.loaded; }
+}
+
+// ── Escape helpers ────────────────────────────────────────────────
+function esc(s)  { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escA(s) { return String(s).replace(/'/g,'&#39;'); }
+</script>

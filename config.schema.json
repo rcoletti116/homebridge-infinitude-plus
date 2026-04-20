@@ -1,0 +1,119 @@
+{
+  "pluginAlias": "InfinitudePlatform",
+  "pluginType": "platform",
+  "singular": true,
+  "customUi": true,
+  "headerDisplay": "<p align=\"center\"><img width=\"30%\" src=\"https://user-images.githubusercontent.com/8211291/131715404-6aa429a1-6a57-447c-b1b6-7ac84ee79977.jpg\"></p>",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "default": "Infinitude",
+        "type": "string",
+        "description": "Platform name shown in logs.",
+        "condition": {
+          "functionBody": "return model.hidden === 'onPurpose';"
+        }
+      },
+      "verbose": {
+        "title": "Verbose Logging",
+        "description": "Enable additional logging to help diagnose issues.",
+        "type": "boolean",
+        "default": false
+      },
+      "thermostats": {
+        "type": "array",
+        "items": {
+          "title": "Thermostat",
+          "description": "Add one entry per Infinitude instance (physical HVAC system).",
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "required": true,
+              "description": "Used as a prefix for zone accessory names, e.g. \"Home Zone 1 Thermostat\"."
+            },
+            "url": {
+              "title": "Infinitude URL",
+              "placeholder": "http://{host}:{port}",
+              "type": "string",
+              "format": "uri",
+              "required": true,
+              "description": "URL used by the plugin to talk to Infinitude. Use 127.0.0.1 if running on the same host."
+            },
+            "externalUrl": {
+              "title": "External URL (optional)",
+              "placeholder": "http://192.168.1.x:{port}",
+              "type": "string",
+              "format": "uri",
+              "description": "LAN/browser-accessible URL for Open and Preview in the custom UI. Only needed if Infinitude URL uses 127.0.0.1 or localhost."
+            },
+            "shutOffAway": {
+              "title": "Away on Off",
+              "description": "Set thermostat to Away activity when HomeKit sets the mode to Off.",
+              "type": "boolean",
+              "default": false
+            },
+            "holdUntil": {
+              "title": "Hold Until",
+              "description": "Hold time for manual overrides (HH:MM). Omit to hold forever.",
+              "type": "string",
+              "pattern": "^([0-1][0-9]|2[0-3]):[0-5][0-9]$"
+            },
+            "holdUntilNextActivity": {
+              "title": "Hold Until Next Scheduled Activity",
+              "description": "Automatically release the hold at the next scheduled program activity.",
+              "type": "boolean",
+              "default": false
+            },
+            "useFan": {
+              "title": "Expose Fan Accessory",
+              "description": "Create a Fanv2 accessory showing blower state for each zone.",
+              "type": "boolean",
+              "default": false
+            },
+            "useOutdoorTemperatureSensor": {
+              "title": "Expose Outdoor Temperature Sensor",
+              "description": "Create a temperature sensor accessory for the outdoor air temperature.",
+              "type": "boolean",
+              "default": true
+            },
+            "sensorpoll": {
+              "title": "Sensor Poll Interval (ms)",
+              "description": "How often to refresh the outdoor temperature sensor, in milliseconds.",
+              "type": "number",
+              "default": 120000,
+              "minimum": 10000,
+              "condition": {
+                "functionBody": "return model.thermostats[arrayIndices].useOutdoorTemperatureSensor === true;"
+              }
+            },
+            "advancedDetails": {
+              "type": "object",
+              "title": "Device Information",
+              "expandable": true,
+              "properties": {
+                "manufacturer": {
+                  "title": "Manufacturer",
+                  "default": "Carrier",
+                  "type": "string"
+                },
+                "model": {
+                  "title": "Model",
+                  "default": "Infinity Touch",
+                  "type": "string"
+                },
+                "serial": {
+                  "title": "Serial Number",
+                  "default": "N/A",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

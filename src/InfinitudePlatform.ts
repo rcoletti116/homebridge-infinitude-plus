@@ -131,6 +131,12 @@ export class InfinitudePlatform implements DynamicPlatformPlugin {
         this.log.info(`Zone ${zoneId}: creating new fan`);
         instance.createFan(zoneId);
       }
+
+      const aUuid = instance.activitySwitchesUuid(zoneId);
+      if (thermostatConfig.useActivitySwitches && !this.cachedAccessories.has(aUuid)) {
+        this.log.info(`Zone ${zoneId}: creating new activity switches`);
+        instance.createActivitySwitches(zoneId);
+      }
     }
 
     const outdoorUuid = instance.outdoorUuid();

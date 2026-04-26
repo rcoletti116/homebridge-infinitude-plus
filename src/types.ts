@@ -13,6 +13,7 @@ export interface ThermostatConfig {
   shutOffAway?: boolean;
   holdUntilNextActivity?: boolean;
   useFan?: boolean;
+  useActivitySwitches?: boolean;
   useOutdoorTemperatureSensor?: boolean;
   sensorpoll?: number;
 }

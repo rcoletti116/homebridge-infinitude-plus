@@ -9,22 +9,25 @@ import {
   CLIENT_TIMEOUT_MS,
 } from './types';
 
+const CACHE_TTL_MS = 10_000; // serve reads from cache for 10 seconds
+
+interface CacheEntry<T> {
+  value: T;
+  expires: number;
+}
+
 /**
  * HTTP client for the Infinitude local API.
  *
- * Key API facts (from https://github.com/nebulous/infinitude/wiki/Infinitude-API-calls):
- *
- *   GET  /api/status/              → full system status JSON
- *   GET  /api/status/{zoneId}      → single zone status (more efficient)
- *   GET  /api/status/{path}        → scalar value at path
- *   GET  /api/config/              → full system config JSON
- *   GET  /api/config?key=val&set_changes=true  → mutate config
- *   GET  /api/{zoneId}/hold?activity=X&until=Y → set hold
- *   GET  /api/{zoneId}/hold?hold=off           → remove hold
- *   GET  /api/{zoneId}/activity/{activity}?clsp=X&htsp=Y&fan=Z → set setpoints/fan
+ * Caches status and config responses for CACHE_TTL_MS to prevent
+ * parallel HomeKit characteristic reads from hammering Infinitude
+ * with redundant HTTP requests.
  */
 export class InfinitudeClient {
   static readonly REFRESH_MS = 10_000;
+
+  private statusCache?: CacheEntry<SystemStatus>;
+  private configCache?: CacheEntry<SystemConfig>;
 
   constructor(
     private readonly url: string,
@@ -47,41 +50,43 @@ export class InfinitudeClient {
     }
   }
 
-  // ─── Read — status ─────────────────────────────────────────────────────────
+  // ─── Cached reads ──────────────────────────────────────────────────────────
 
   async getStatus(): Promise<SystemStatus> {
-    return this.fetch<SystemStatus>('/api/status/');
+    const now = Date.now();
+    if (this.statusCache && now < this.statusCache.expires) {
+      return this.statusCache.value;
+    }
+    const value = await this.fetch<SystemStatus>('/api/status/');
+    this.statusCache = { value, expires: now + CACHE_TTL_MS };
+    return value;
   }
-
-  /**
-   * Fetch a single zone's status directly via /api/status/{zoneId}.
-   * More efficient than fetching all zones when only one zone is needed.
-   */
-  async getZoneStatus(zoneId: string): Promise<ZoneStatus> {
-    const zone = await this.fetch<ZoneStatus>(`/api/status/${zoneId}`);
-    if (!zone) throw new Error(`Zone ${zoneId} not found`);
-    return zone;
-  }
-
-  async getOutdoorTemperature(): Promise<number> {
-    // /api/status/oat returns {"oat": 32.0} — unwrap the value
-    const resp = await this.fetch<Record<string, unknown>>('/api/status/oat');
-    const raw = typeof resp === 'object' && resp !== null ? resp['oat'] ?? resp : resp;
-    return parseFloat(String(raw));
-  }
-
-  async getFilterLifeLevel(): Promise<number> {
-    // /api/status/filtrlvl returns {"filtrlvl": 85} — unwrap the value
-    const resp = await this.fetch<Record<string, unknown>>('/api/status/filtrlvl');
-    const raw = typeof resp === 'object' && resp !== null ? resp['filtrlvl'] ?? resp : resp;
-    return parseFloat(String(raw));
-  }
-
-  // ─── Read — config ─────────────────────────────────────────────────────────
 
   async getConfig(): Promise<SystemConfig> {
+    const now = Date.now();
+    if (this.configCache && now < this.configCache.expires) {
+      return this.configCache.value;
+    }
     const wrapper = await this.fetch<{ data: SystemConfig }>('/api/config/');
-    return wrapper['data'];
+    const value = wrapper['data'];
+    this.configCache = { value, expires: now + CACHE_TTL_MS };
+    return value;
+  }
+
+  /** Invalidate the cache after a write so the next read is fresh. */
+  private invalidateCache(): void {
+    this.statusCache = undefined;
+    this.configCache = undefined;
+  }
+
+  // ─── Derived reads ─────────────────────────────────────────────────────────
+
+  async getZoneStatus(zoneId: string): Promise<ZoneStatus> {
+    // Use cached full status rather than a separate HTTP call per zone
+    const status = await this.getStatus();
+    const zone = status['zones'][0]['zone'].find((z) => z['id'] === zoneId);
+    if (!zone) throw new Error(`Zone ${zoneId} not found`);
+    return zone;
   }
 
   async getZoneConfig(zoneId: string): Promise<ZoneConfig> {
@@ -91,19 +96,37 @@ export class InfinitudeClient {
     return zone;
   }
 
-  async getTemperatureScale(): Promise<string> {
-    const config = await this.getConfig();
-    return config['cfgem'][0] as unknown as string;
-  }
-
-  // ─── Combined ──────────────────────────────────────────────────────────────
-
   async getSystem(): Promise<InfinitudeSystem> {
     const [status, config] = await Promise.all([this.getStatus(), this.getConfig()]);
     return { status, config };
   }
 
-  // ─── Write — activity setpoints & fan ──────────────────────────────────────
+  async getTemperatureScale(): Promise<string> {
+    const config = await this.getConfig();
+    return config['cfgem'][0] as unknown as string;
+  }
+
+  async getOutdoorTemperature(): Promise<number> {
+    // oat is in the full status — use cache
+    const status = await this.getStatus();
+    const raw = (status as unknown as Record<string, unknown>)['oat'];
+    if (raw !== undefined) return parseFloat(String(raw));
+    // Fallback: dedicated endpoint
+    const resp = await this.fetch<Record<string, unknown>>('/api/status/oat');
+    const val = typeof resp === 'object' && resp !== null ? resp['oat'] ?? resp : resp;
+    return parseFloat(String(val));
+  }
+
+  async getFilterLifeLevel(): Promise<number> {
+    const status = await this.getStatus();
+    const raw = (status as unknown as Record<string, unknown>)['filtrlvl'];
+    if (raw !== undefined) return parseFloat(String(raw));
+    const resp = await this.fetch<Record<string, unknown>>('/api/status/filtrlvl');
+    const val = typeof resp === 'object' && resp !== null ? resp['filtrlvl'] ?? resp : resp;
+    return parseFloat(String(val));
+  }
+
+  // ─── Writes (always invalidate cache) ─────────────────────────────────────
 
   async setTargetTemperature(
     zoneId: string,
@@ -114,33 +137,30 @@ export class InfinitudeClient {
     const zone = await this.getZoneStatus(zoneId);
     const resolvedActivity = activity ?? zone?.['currentActivity']?.[0] ?? 'manual';
     await this.fetch(`/api/${zoneId}/activity/${resolvedActivity}?${setpoint}=${targetTemperature}`);
+    this.invalidateCache();
   }
 
-  /**
-   * Set the fan speed for a zone's activity.
-   * Valid values: 'off' | 'low' | 'med' | 'high' | 'auto'
-   */
   async setFanSpeed(zoneId: string, activity: string, speed: string): Promise<void> {
     await this.fetch(`/api/${zoneId}/activity/${activity}?fan=${speed}`);
+    this.invalidateCache();
   }
-
-  // ─── Write — hold ──────────────────────────────────────────────────────────
 
   async setActivity(zoneId: string, activity: string, until: string): Promise<void> {
     await this.fetch(`/api/${zoneId}/hold?activity=${activity}&until=${until}`);
+    this.invalidateCache();
   }
 
   async removeHold(zoneId: string): Promise<void> {
     await this.fetch(`/api/${zoneId}/hold?hold=off`);
+    this.invalidateCache();
   }
-
-  // ─── Write — system config ─────────────────────────────────────────────────
 
   async setSystemMode(mode: string): Promise<void> {
     const config = await this.getConfig();
     const currentMode = config['mode'][0] as unknown as string;
     if (currentMode !== mode) {
       await this.fetch(`/api/config?mode=${mode}&set_changes=true`);
+      this.invalidateCache();
     }
   }
 

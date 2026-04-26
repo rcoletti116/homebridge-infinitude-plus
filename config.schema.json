@@ -73,6 +73,12 @@
               "type": "boolean",
               "default": false
             },
+            "useActivitySwitches": {
+              "title": "Expose Activity Preset Switches",
+              "description": "Add switches to each thermostat for the Infinity activity presets: Home, Away, Sleep, Wake, and Manual.",
+              "type": "boolean",
+              "default": false
+            },
             "useOutdoorTemperatureSensor": {
               "title": "Expose Outdoor Temperature Sensor",
               "description": "Create a temperature sensor accessory for the outdoor air temperature.",

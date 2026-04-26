@@ -3,6 +3,7 @@ import { InfinitudeClient } from './InfinitudeClient';
 import { InfinitudeThermostat } from './InfinitudeThermostat';
 import { InfinitudeSensor } from './InfinitudeSensor';
 import { InfinitudeFan } from './InfinitudeFan';
+import { InfinitudeActivitySwitches } from './InfinitudeActivitySwitches';
 import { InfinitudeLog } from './InfinitudeLog';
 import { ThermostatConfig, PLUGIN_NAME, PLATFORM_NAME } from './types';
 
@@ -38,6 +39,10 @@ export class InfinitudeInstance {
     return this.api.hap.uuid.generate(`${this.id}_${zoneId}_fan`);
   }
 
+  activitySwitchesUuid(zoneId: string): string {
+    return this.api.hap.uuid.generate(`${this.id}_${zoneId}_activity`);
+  }
+
   outdoorUuid(): string {
     return this.api.hap.uuid.generate(`${this.id}_outdoorSensor`);
   }
@@ -63,10 +68,13 @@ export class InfinitudeInstance {
       const tUuid    = this.thermostatUuid(zoneId);
       const fUuid    = this.fanUuid(zoneId);
 
+      const aUuid = this.activitySwitchesUuid(zoneId);
       this.zoneIds[tUuid]   = zoneId;
       this.zoneIds[fUuid]   = zoneId;
+      this.zoneIds[aUuid]   = zoneId;
       this.zoneNames[tUuid] = `${this.config.name} ${zoneName} Thermostat`;
       this.zoneNames[fUuid] = `${this.config.name} ${zoneName} Fan`;
+      this.zoneNames[aUuid] = `${this.config.name} ${zoneName} Activities`;
 
       result.push({ zoneId, zoneName });
     }
@@ -104,6 +112,9 @@ export class InfinitudeInstance {
         break;
       case Categories.FAN:
         this.configureFan(accessory);
+        break;
+      case Categories.SWITCH:
+        this.configureActivitySwitches(accessory);
         break;
       default:
         this.log.warn(`Unknown category ${category} for ${accessory.displayName} — skipping`);
@@ -171,10 +182,29 @@ export class InfinitudeInstance {
     new InfinitudeSensor('Outdoor', this.client, this.log, this.config, accessory, this.hap, this.api);
   }
 
+  createActivitySwitches(zoneId: string): PlatformAccessory {
+    const uuid = this.activitySwitchesUuid(zoneId);
+    const name = this.zoneNames[uuid];
+    this.log.info(`Creating activity switches: ${name}`);
+    const acc = new this.api.platformAccessory(name, uuid, Categories.SWITCH);
+    acc.addService(this.api.hap.Service.Switch, 'Home', 'home');
+    acc.context = { zoneId, zoneName: name, instanceId: this.id };
+    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [acc]);
+    this.configureActivitySwitches(acc);
+    return acc;
+  }
+
   configureFan(accessory: PlatformAccessory): void {
     const name   = this.zoneNames[accessory.UUID] ?? String(accessory.displayName);
     const zoneId = this.zoneIds[accessory.UUID];
     this.log.debug(`Configuring fan: ${name} (zone ${zoneId})`);
     new InfinitudeFan(name, zoneId, this.client, this.log, this.config, accessory, this.hap);
+  }
+
+  configureActivitySwitches(accessory: PlatformAccessory): void {
+    const name   = this.zoneNames[accessory.UUID] ?? String(accessory.displayName);
+    const zoneId = this.zoneIds[accessory.UUID];
+    this.log.debug(`Configuring activity switches: ${name} (zone ${zoneId})`);
+    new InfinitudeActivitySwitches(name, zoneId, this.client, this.log, this.config, accessory, this.hap);
   }
 }

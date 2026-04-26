@@ -26,9 +26,12 @@ import {
  *   - FilterChangeIndication
  *   - TemperatureDisplayUnits (set to FAHRENHEIT by default)
  */
+const POLL_INTERVAL_MS = 15_000;
+
 export class InfinitudeThermostat {
   private readonly C: typeof Characteristic;
   private historyService?: FakeGatoHistoryService;
+  private pollTimer?: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly name: string,
@@ -44,6 +47,7 @@ export class InfinitudeThermostat {
     this.bindInformation();
     this.initFakegato();
     this.registerHandlers();
+    this.startPolling();
   }
 
   // ─── Fakegato history ──────────────────────────────────────────────────────
@@ -120,6 +124,7 @@ export class InfinitudeThermostat {
 
     svc.getCharacteristic(C.FilterChangeIndication)
       .onGet(() => this.getFilterChangeIndication());
+
   }
 
   // --- Getters ----------------------------------------------------------------
@@ -348,4 +353,104 @@ export class InfinitudeThermostat {
     const t = scale === 'F' ? this.client.celsiusToFahrenheit(temperature) : temperature;
     return parseFloat(t.toString()).toFixed(1);
   }
+
+  // ─── Background polling ───────────────────────────────────────────────────
+
+  private startPolling(): void {
+    // Push an immediate update, then refresh every POLL_INTERVAL_MS.
+    // This keeps HomeKit current without waiting for a HomeKit-initiated read.
+    this.pushUpdates();
+    this.pollTimer = setInterval(() => this.pushUpdates(), POLL_INTERVAL_MS);
+  }
+
+  stopPolling(): void {
+    if (this.pollTimer !== undefined) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = undefined;
+    }
+  }
+
+  private pushUpdates(): void {
+    const svc = this.accessory.getService(this.hap.Service.Thermostat);
+    if (!svc) return;
+    const C = this.C;
+
+    // Fetch system state once and push all characteristics from it
+    Promise.all([
+      this.client.getSystem(),
+      this.client.getTemperatureScale(),
+      this.client.getFilterLifeLevel(),
+    ]).then(([system, scale, rawFilter]) => {
+      const zone = system.status['zones'][0]['zone'].find((z) => z['id'] === this.zoneId);
+      if (!zone) return;
+
+      // Current temperature
+      const currentTemp = this.toHomeKit(parseFloat(zone['rt'][0]), scale);
+      svc.updateCharacteristic(C.CurrentTemperature, currentTemp);
+
+      // Humidity
+      const humidity = parseFloat(zone['rh'][0]);
+      svc.updateCharacteristic(C.CurrentRelativeHumidity, humidity);
+
+      // Heating/cooling thresholds
+      const htsp = this.clamp(this.toHomeKit(parseFloat(zone['htsp'][0]), scale), MIN_HEAT_C, MAX_HEAT_C);
+      const clsp = this.clamp(this.toHomeKit(parseFloat(zone['clsp'][0]), scale), MIN_COOL_C, MAX_COOL_C);
+      svc.updateCharacteristic(C.HeatingThresholdTemperature, htsp);
+      svc.updateCharacteristic(C.CoolingThresholdTemperature, clsp);
+
+      // Target temperature (mode-dependent)
+      const mode = String(system.config['mode'][0]);
+      const targetTemp = mode === 'heat' || mode === 'hpheat' ? htsp
+                       : mode === 'cool' ? clsp
+                       : currentTemp;
+      svc.updateCharacteristic(C.TargetTemperature, targetTemp);
+
+      // Current heating/cooling state
+      switch (zone['zoneconditioning'][0]) {
+        case 'active_heat':
+          svc.updateCharacteristic(C.CurrentHeatingCoolingState, C.CurrentHeatingCoolingState.HEAT);
+          break;
+        case 'idle':
+          svc.updateCharacteristic(C.CurrentHeatingCoolingState, C.CurrentHeatingCoolingState.OFF);
+          break;
+        default:
+          svc.updateCharacteristic(C.CurrentHeatingCoolingState, C.CurrentHeatingCoolingState.COOL);
+      }
+
+      // Target heating/cooling state
+      if (zone['hold']?.[0] === 'on' && String(zone['currentActivity']?.[0]) === 'away') {
+        svc.updateCharacteristic(C.TargetHeatingCoolingState, C.TargetHeatingCoolingState.OFF);
+      } else {
+        switch (mode) {
+          case 'auto':   svc.updateCharacteristic(C.TargetHeatingCoolingState, C.TargetHeatingCoolingState.AUTO); break;
+          case 'heat':
+          case 'hpheat': svc.updateCharacteristic(C.TargetHeatingCoolingState, C.TargetHeatingCoolingState.HEAT); break;
+          case 'cool':   svc.updateCharacteristic(C.TargetHeatingCoolingState, C.TargetHeatingCoolingState.COOL); break;
+          default:       svc.updateCharacteristic(C.TargetHeatingCoolingState, C.TargetHeatingCoolingState.OFF);
+        }
+      }
+
+      // Filter (inverted: 100 = new, 0 = replace)
+      const filterLevel = 100 - rawFilter;
+      svc.updateCharacteristic(C.FilterLifeLevel, filterLevel);
+      svc.updateCharacteristic(
+        C.FilterChangeIndication,
+        filterLevel < 10 ? C.FilterChangeIndication.CHANGE_FILTER : C.FilterChangeIndication.FILTER_OK,
+      );
+
+      // Fakegato history entry
+      if (this.historyService) {
+        this.historyService.addEntry({
+          time: Math.round(Date.now() / 1000),
+          temp: currentTemp,
+          humidity,
+        });
+      }
+
+      this.log.verbose(`Poll pushed updates for ${this.name}: ${currentTemp}°C, ${humidity}% RH, mode=${mode}`);
+    }).catch((err) => {
+      this.log.warn(`Poll failed for ${this.name}: ${err}`);
+    });
+  }
+
 }

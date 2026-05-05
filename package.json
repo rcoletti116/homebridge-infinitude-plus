@@ -1,6 +1,6 @@
 {
   "name": "homebridge-infinitude-plus",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Infinitude Plugin for Homebridge \u2014 Modern TypeScript rewrite with Homebridge 2.0 support, Eve history, and custom UI",
   "license": "ISC",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
     "homebridge": "^1.8.0 || ^2.0.0"
   },
   "author": {
-    "name": "Jeremy Benscoter"
+    "name": "Robert Coletti - Oconee Smart Homes"
   },
   "customUiPath": "./homebridge-ui/public",
 "scripts": {

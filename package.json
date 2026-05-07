@@ -1,10 +1,6 @@
 {
   "name": "homebridge-infinitude-plus",
-<<<<<<< HEAD
-  "version": "1.0.0",
-=======
   "version": "1.0.1",
->>>>>>> 9db93b301983f5eba31e43fcc873c6a3d9fab06b
   "description": "Infinitude Plugin for Homebridge \u2014 Modern TypeScript rewrite with Homebridge 2.0 support, Eve history, and custom UI",
   "license": "ISC",
   "main": "dist/index.js",
@@ -31,8 +27,7 @@
     "homebridge": "^1.8.0 || ^2.0.0"
   },
   "author": {
-<<<<<<< HEAD
-    "name": "Jeremy Benscoter"
+    "name": "Robert Coletti"
   },
   "customUiPath": "./homebridge-ui/public",
   "scripts": {
@@ -44,7 +39,6 @@
     "prepublishOnly": "npm run lint && npm run build",
     "start": "homebridge --debug --plugin-path . --user-storage-path ."
   },
-=======
     "name": "Robert Coletti - Oconee Smart Homes"
   },
   "customUiPath": "./homebridge-ui/public",
@@ -57,7 +51,6 @@
   "prepublishOnly": "npm run build",
   "start": "homebridge --debug --plugin-path . --user-storage-path ."
 },
->>>>>>> 9db93b301983f5eba31e43fcc873c6a3d9fab06b
   "dependencies": {
     "axios": "^1.6.0",
     "fakegato-history": "^0.6.5"
@@ -80,7 +73,5 @@
   },
   "peerDependencies": {
     "homebridge": "^1.8.0 || ^2.0.0",
-    "@homebridge/plugin-ui-utils": "^2.0.0"
-  },
   "homepage": "https://github.com/rcoletti116/homebridge-infinitude-plus#readme"
 }

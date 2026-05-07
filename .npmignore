@@ -1,0 +1,9 @@
+src/
+__tests__/
+*.ts
+!dist/**
+tsconfig.json
+jest.config.js
+.eslintrc.js
+.prettierrc.yaml
+.nvmrc

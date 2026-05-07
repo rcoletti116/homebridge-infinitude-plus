@@ -1,6 +1,7 @@
 {
   "name": "homebridge-infinitude-plus",
   "version": "1.0.2",
+  "homepage": "https://github.com/rcoletti116/homebridge-infinitude-plus#readme",
   "description": "Infinitude Plugin for Homebridge \u2014 Modern TypeScript rewrite with Homebridge 2.0 support, Eve history, and custom UI",
   "license": "ISC",
   "main": "dist/index.js",
@@ -70,7 +71,6 @@
     "typescript": "^5.4.0"
   },
   "peerDependencies": {
-    "homebridge": "^1.8.0 || ^2.0.0",
-  "homepage": "https://github.com/rcoletti116/homebridge-infinitude-plus#readme"
+    "homebridge": "^1.8.0 || ^2.0.0"
 }
 }

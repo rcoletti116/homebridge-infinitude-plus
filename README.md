@@ -1,9 +1,7 @@
 <p align="center"> <a href="https://github.com/nebulous/infinitude"><img src="https://user-images.githubusercontent.com/8211291/131715404-6aa429a1-6a57-447c-b1b6-7ac84ee79977.jpg" height=90></a></p>
 
-# homebridge-infinitude
+# homebridge-infinitude-plus
 [Infinitude](https://github.com/nebulous/infinitude) Plugin for Homebridge. Enable Carrier/Bryant Infinity Touch Thermostats in HomeKit.
-
-[![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
 
 What is Infinitude? Infinitude is an alternative web service for Carrier Infinity Touch and other compatible thermostats. It allows read and control of your Infinity system locally over your network (no serial connection needed).
 
